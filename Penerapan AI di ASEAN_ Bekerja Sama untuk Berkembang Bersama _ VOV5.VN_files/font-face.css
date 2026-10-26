@@ -1,0 +1,30 @@
+@font-face {
+  font-family: 'SVN-Gilroy-Light';
+  src: url('../fonts/SVN-GilroyLight.eot');
+  src: local('☺'), url('../fonts/SVN-GilroyLight.woff') format('woff'), url('../fonts/SVN-GilroyLight.ttf') format('truetype'), url('../fonts/SVN-GilroyLight.svg') format('svg');
+  font-weight: normal;
+  font-style: normal;
+}
+@font-face {
+  font-family: 'SVN-Gilroy';
+  src: url('../fonts/SVN-Gilroy.eot');
+  src: local('☺'), url('../fonts/SVN-Gilroy.woff') format('woff'), url('../fonts/SVN-Gilroy.ttf') format('truetype'), url('../fonts/SVN-Gilroy.svg') format('svg');
+  font-weight: normal;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'SVN-Gilroy-Medium';
+  src: url('../fonts/SVN-GilroyMedium.eot');
+  src: local('☺'), url('../fonts/SVN-GilroyMedium.woff') format('woff'), url('../fonts/SVN-GilroyMedium.ttf') format('truetype'), url('../fonts/SVN-GilroyMedium.svg') format('svg');
+  font-weight: normal;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'SVN-Gilroy-Semibold';
+  src: url('../fonts/SVN-GilroySemiBold.eot');
+  src: local('☺'), url('../fonts/SVN-GilroySemiBold.woff') format('woff'), url('../fonts/SVN-GilroySemiBold.ttf') format('truetype'), url('../fonts/SVN-GilroySemiBold.svg') format('svg');
+  font-weight: normal;
+  font-style: normal;
+}

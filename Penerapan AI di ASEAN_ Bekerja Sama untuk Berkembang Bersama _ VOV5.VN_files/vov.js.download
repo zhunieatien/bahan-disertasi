@@ -1,0 +1,200 @@
+(function ($) {
+
+    'use strict';
+
+    // tabs
+    var el = document.querySelectorAll('.tabs');
+    var tabNavigationLinks = document.querySelectorAll('.tabs__link');
+    var tabContentContainers = document.querySelectorAll('.tabs__tab');
+    var activeIndex = 0;
+
+    /**
+     * handleClick
+     * @description Handles click event listeners on each of the links in the
+     *   tab navigation. Returns nothing.
+     * @param {HTMLElement} link The link to listen for events on
+     * @param {Number} index The index of that link
+     */
+    var handleClick = function (link, index) {
+        link.addEventListener('click', function (e) {
+            e.preventDefault();
+            goToTab(index);
+        });
+    };
+
+    /**
+     * goToTab
+     * @description Goes to a specific tab based on index. Returns nothing.
+     * @param {Number} index The index of the tab to go to
+     */
+    var goToTab = function (index) {
+        if (index !== activeIndex && index >= 0 && index <= tabNavigationLinks.length) {
+            tabNavigationLinks[activeIndex].classList.remove('is-active');
+            tabNavigationLinks[index].classList.add('is-active');
+            tabContentContainers[activeIndex].classList.remove('is-active');
+            tabContentContainers[index].classList.add('is-active');
+            activeIndex = index;
+        }
+    };
+
+    /**
+     * init
+     * @description Initializes the component by removing the no-js class from
+     *   the component, and attaching event listeners to each of the nav items.
+     *   Returns nothing.
+     */
+    for (var e = 0; e < el.length; e++) {
+        el[e].classList.remove('no-js');
+    }
+
+    for (var i = 0; i < tabNavigationLinks.length; i++) {
+        var link = tabNavigationLinks[i];
+        handleClick(link, i);
+    }
+
+    // Main menu.
+    $(document).on('click', function () {
+        $('.vov-main-nav').removeClass('hover');
+        $('body').removeClass('vov-nav-show');
+    });
+    $('.vov-main-nav').on('click', function (event) {
+        event.stopPropagation();
+    });
+    $('.show-vov-nav').on('click', function (event) {
+        event.stopPropagation();
+        event.preventDefault();
+        // $(this).toggleClass('hover');
+        $('.vov-main-nav').toggleClass('hover');
+        $('body').toggleClass('vov-nav-show');
+    });
+    $('.vov-main-nav .close-nav').on('click', function () {
+        $('.vov-main-nav').removeClass('hover');
+        $('body').removeClass('vov-nav-show');
+    });
+    $('.nav-control-mobile').on('click', function () {
+      $('.main-nav').animate({
+        scrollLeft: "+=80px"
+      }, "slow");
+    });
+    $('#block-vov-listening-watching a').on('click', function (e) {
+      e.preventDefault();
+      $('html, body').animate({
+        scrollTop: $(".listening-watching").offset().top - 100
+      }, 1000);
+    });
+
+  //backToTop
+  //Check to see if the window is top if not then display button
+  var navbar = document.getElementById("block-vov-news-main-navigation-mainmenu") || document.getElementById("block-vov-news-main-navigation-en-mainmenu") || document.getElementById('block-vov-news-specialcategorynavigation');
+  var sticky = navbar == null ? 0 : navbar.offsetTop;
+  $(window).scroll(function () {
+    if (navbar != null && !$("body").hasClass("toolbar-fixed")) {
+      if (window.pageYOffset >= sticky) {
+        navbar.classList.add("sticky");
+      } else {
+        navbar.classList.remove("sticky");
+      }
+    }
+
+    if ($(this).scrollTop() > 100) {
+      $('#backToTop').fadeIn();
+    } else {
+      $('#backToTop').fadeOut();
+    }
+  });
+
+  //Click event to scroll to top
+  $('#backToTop').click(function(){
+    $('html, body').animate({scrollTop : 0},800);
+    return false;
+  });
+
+  $(window).on( "load", function() {
+    let getHeight = $('.tab .tab__content').height() + 40;
+    $('.js-height-tab').height(getHeight);
+  });
+
+  $(window).resize(function() {
+    let getHeight = $('.tab .tab__content').height() + 40;
+    $('.js-height-tab').height(getHeight);
+  });
+  $(window).resize();
+
+
+  // Toggle menu mobile
+  $('.show-menu').click(function (){
+    $('.menu-mobile').toggleClass('active');
+    $('body').toggleClass('overflow-hidden');
+    $(this).toggleClass('show');
+  });
+
+  // Search
+  $('.header-content .form-submit').val('');
+  $('.menu-mobile .form-submit').val('');
+
+  // Nghe Radio
+  if ($('#lich-phat-song-table .item').length){
+    $('#lich-phat-song-table .item').each(function (i, e){
+      var sTime = new Date();
+      var eTime = new Date();
+      var curentTime = new Date();
+      var time = $('.time', $(e)).text().trim().split('-');
+      if (time[1] !== undefined) {
+        var startS = time[0].trim().split('h');
+        sTime.setMilliseconds(0);
+        sTime.setSeconds(0);
+        sTime.setHours(startS[0].trim());
+        sTime.setMinutes(startS[1].trim());
+        var endS = time[1].trim().split('h');
+        eTime.setMilliseconds(0);
+        eTime.setSeconds(0);
+        eTime.setHours(endS[0].trim());
+        eTime.setMinutes(endS[1].trim());
+        $(e).removeClass('active');
+        if(curentTime.getTime() >= sTime.getTime() && curentTime.getTime() < eTime.getTime()) {
+          $(this).removeClass('d-none');
+          $('.continue', $(this)).addClass('d-none');
+
+          $(this).next().removeClass('d-none');
+          $('.playing', $(this).next()).addClass('d-none');
+        }
+      }
+    });
+  }
+})(jQuery);
+
+(($, Drupal) => {
+  Drupal.behaviors.vovTheme = {
+    attach: function (context, settings) {
+
+      $('#header .search-box').on('click', '.show-form', function(e) {
+        e.stopPropagation();
+        e.preventDefault();
+        var $this = $(this),
+          $searchForm = $this.parents('.search-box');
+        $searchForm.toggleClass('active');
+      });
+
+      $('#header .search-box__form > form').on('click', function(e) {
+        e.stopPropagation();
+      });
+
+      $(document).on('click', function (e) {
+        if (!$(e.target).closest('.language-switcher-language-url > a').length &&
+          !$(e.target).is('.language-switcher-language-url > a')) {
+          $('.language-switcher-language-url ul').hide();
+        }
+        $('#header .search-box').removeClass('active');
+      });
+
+      $('.article figcaption:empty').each(function () {
+        $(this).remove();
+      });
+    } // end attach.
+  }
+  $('#user-login-form').on('submit', function (e){
+    sessionStorage.clear();
+  });
+
+
+})(jQuery, Drupal);

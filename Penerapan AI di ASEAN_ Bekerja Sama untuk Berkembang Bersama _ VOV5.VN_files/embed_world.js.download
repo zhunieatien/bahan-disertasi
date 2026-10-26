@@ -1,0 +1,354 @@
+(function ($, drupalSettings) {
+    var vovAccountUrl = vovAccountLoginUrl
+
+    var language = {
+        key: 'vi',
+        login: 'Đăng nhập',
+        logout: 'Đăng xuất',
+        register: 'Tạo tài khoản',
+        change_pass: 'Đổi mật khẩu',
+        email_is_invalid: 'Địa chỉ email không hợp lệ, vui lòng nhập lại',
+        year: 'năm',
+        month: 'tháng',
+        week: 'tuần',
+        day: 'ngày',
+        hour: 'giờ',
+        minute: 'phút',
+        seconds: 'giây',
+        just_now: 'ngay bây giờ',
+        comment: 'Phản hồi',
+        comment_inp: 'Viết bình luận',
+        read_more: 'Xem thêm bình luận',
+        title_success: 'Gửi bình luận thành công',
+        message_success:
+            '<div>Bình luận của bạn đang được xem xét</div><div>Hộp thoại tự đóng sau 3s</div>',
+        password_empty: 'Vui lòng nhập mật khẩu',
+        email_empty: 'Vui lòng nhập địa chỉ email của bạn',
+        field_empty: 'Vui lòng nhập đầy đủ các trường',
+        comment_empty:
+            'Bình luận không thể để trống. Vui lòng chia sẻ vài dòng suy nghĩ của bạn về bài viết.',
+        name_empty: 'Họ và tên không được bỏ trống.',
+        email_empty: 'Địa chỉ email không được bỏ trống.',
+    }
+
+    function fromNow(
+        date,
+        nowDate = Date.now(),
+        rft = new Intl.RelativeTimeFormat(language.key, { numeric: 'auto' }),
+    ) {
+        const SECOND = 1000
+        const MINUTE = 60 * SECOND
+        const HOUR = 60 * MINUTE
+        const DAY = 24 * HOUR
+        const WEEK = 7 * DAY
+        const MONTH = 30 * DAY
+        const YEAR = 365 * DAY
+        const intervals = [
+            { ge: YEAR, divisor: YEAR, unit: 'year' },
+            { ge: MONTH, divisor: MONTH, unit: 'month' },
+            { ge: WEEK, divisor: WEEK, unit: 'week' },
+            { ge: DAY, divisor: DAY, unit: 'day' },
+            { ge: HOUR, divisor: HOUR, unit: 'hour' },
+            { ge: MINUTE, divisor: MINUTE, unit: 'minute' },
+            { ge: 30 * SECOND, divisor: SECOND, unit: 'seconds' },
+            { ge: 0, divisor: 1, text: 'just now' },
+        ]
+        const now =
+            typeof nowDate === 'object'
+                ? nowDate.getTime()
+                : new Date(nowDate).getTime()
+        const diff =
+            now - (typeof date === 'object' ? date : new Date(date)).getTime()
+        const diffAbs = Math.abs(diff)
+        for (const interval of intervals) {
+            if (diffAbs >= interval.ge) {
+                const x = Math.round(Math.abs(diff) / interval.divisor)
+                const isFuture = diff < 0
+                return interval.unit
+                    ? rft.format(isFuture ? x : -x, interval.unit)
+                    : interval.text
+            }
+        }
+    }
+
+    $('body').on('click', '.comment-item .reply-comment', function (event) {
+        var container = $(event.target).closest('.comment-item')[0]
+        if (container) {
+            var inputContainer = $(container).children('.vov-social-reply-comment')
+            if (!inputContainer.html()) {
+                var inputReply =
+                    $(event.target).closest('.indented').length > 0
+                        ? $(event.target).closest('.indented')[0].id.substr(20)
+                        : $(event.target).closest('.comment-item')[0].id.substr(19)
+                getInputReplyComment(inputReply).then(function (res) {
+                    inputContainer.html(res)
+                })
+            } else {
+                inputContainer.toggleClass('d-none')
+            }
+        }
+    })
+
+    function initHtml(data) {
+        var result = ''
+        data.forEach((element) => {
+            var avaUrl = element.user_avatar
+                ? element.user_avatar
+                : 'https://ui-avatars.com/api/?length=1&amp;name=' + element.username
+            var htmlComment = `    <div class="item-comment d-flex mb-3">
+      <div class="me-2">
+      <img class="rounded-circle" src="${avaUrl}" alt="" width="40px">
+      </div>
+      <div class="comment-item">
+        <div>
+          <span class="fw-bold">${element.username}</span> - <span class="text-secondary" style="font-size: 14px">${fromNow(element.created_at)}</span>
+        </div>
+        <div class="content">
+          <span
+            >${element.content}</span
+          >
+        </div>
+        <div id="vov-social-indented-${element.cid}">
+        </div>
+      </div>
+    </div>`
+            result = result.concat(htmlComment)
+        })
+        return result
+    }
+
+    var fieldComment = $('#vov-social-field-comment')
+    let nid = 0
+    if (fieldComment.length > 0) {
+        nid = fieldComment.data('nid')
+    }
+
+    const listChildComment = async (cid) => {
+        const childResponse = await fetch(
+            vovAccountUrl +
+            '/get-by-pid?pid=' +
+            cid +
+            '&lang=' +
+            drupalSettings.path.currentLanguage,
+            {
+                method: 'GET',
+                credentials: 'include',
+            },
+        )
+        const childJson = await childResponse.json()
+        var listChild = childJson.data
+        if (listChild && listChild.length > 0) {
+            var parent = $('#vov-social-indented-' + cid)
+            console.log(parent);
+            var childHtml = initHtml(listChild, cid)
+            let loadMore = ''
+            if (childJson.count_next > 3) {
+                loadMore =
+                    '<div class="comment-item__custom"><div class="comment-item"><label class="text-vov-red pointer vov-social-load-more-child">' +
+                    language.read_more +
+                    '</label></div></div>'
+            }
+            parent.html(
+                '<div class="comment-block mt-3" id="vov-social-content-box-' +
+                cid +
+                '">' +
+                childHtml +
+                '</div>' +
+                loadMore,
+            )
+        }
+    }
+
+    const getInputReplyComment = async (pid) => {
+        return await fetch(
+            vovAccountUrl +
+            '/create-comment-email?nid=' +
+            nid +
+            (pid ? '&pid=' + pid : '') +
+            '&lang=' +
+            drupalSettings.path.currentLanguage,
+            {
+                method: 'GET',
+                credentials: 'include',
+            },
+        ).then((res) => {
+            return res.text()
+        })
+    }
+
+    var lid = 0
+
+    function listComment() {
+        getInputReplyComment().then(async function (res) {
+            var htmlToAdd =
+                '<h3 class="vovvn-title">' + language.comment_inp + '</h3>' + res
+            const response = await fetch(
+                vovAccountUrl +
+                '/get-all-comment?domain=vovworld.vn&nid=' +
+                nid +
+                '&lang=' +
+                drupalSettings.path.currentLanguage,
+                {
+                    method: 'GET',
+                    credentials: 'include',
+                },
+            )
+            console.log(
+                vovAccountUrl +
+                '/get-all-comment?domain=vovworld.vn&nid=' +
+                nid +
+                '&lang=' +
+                drupalSettings.path.currentLanguage,
+            )
+            const myJson = await response.json()
+            let listCommentContent =
+                '<div class="comment-block" id="vov-social-content-box">'
+            let loadMore = ''
+            if (myJson.data?.length > 0) {
+                listCommentContent += initHtml(myJson.data)
+                if (myJson.count_next > 5) {
+                    lid = myJson.data[myJson.data.length - 1].cid
+                    loadMore =
+                        '<div class="comment-item__custom"><div class="comment-item text-center"><label id="vov-social-load-more-btn" class="text-vov-red pointer fw-bold">' +
+                        language.read_more +
+                        '</label></div></div>'
+                }
+                listCommentContent += '</div>'
+                myJson.data.forEach((element) => {
+                    listChildComment(element.cid)
+                })
+            }
+            var messageDialog =
+                '<div id="dialog" title="' + language.title_success + '"></div>'
+            fieldComment.append(
+                htmlToAdd + listCommentContent + loadMore + messageDialog,
+            )
+        })
+    }
+
+    $('body').on('click', '.vov-social-load-more-child', async function (event) {
+        var container = $(event.target).closest('.indented')[0]
+        var cid = container.id.substr(20)
+        var commentContainer = $(container).children('.comment-block')
+        var lid = commentContainer.children().last()[0].id.substr(20)
+        const childResponse = await fetch(
+            vovAccountUrl +
+            '/get-by-pid?pid=' +
+            cid +
+            '&lid=' +
+            lid +
+            '&lang=' +
+            drupalSettings.path.currentLanguage,
+            {
+                method: 'GET',
+                credentials: 'include',
+            },
+        )
+        const childJson = await childResponse.json()
+        var listChild = childJson.data
+        if (listChild && listChild.length > 0) {
+            var parent = $('#vov-social-content-box-' + cid)
+            var childHtml = initHtml(listChild, cid)
+            if (childJson.count_next <= 3) {
+                $(event.target).hide()
+            }
+            parent.after(childHtml)
+        }
+    })
+
+    $('body').on('click', '#vov-social-load-more-btn', async function (event) {
+        var contentBox = $('#vov-social-content-box')
+        const response = await fetch(
+            vovAccountUrl +
+            '/get-all-comment?domain=vovworld.vn&nid=' +
+            nid +
+            '&lid=' +
+            lid +
+            '&lang=' +
+            drupalSettings.path.currentLanguage,
+            {
+                method: 'GET',
+                credentials: 'include',
+            },
+        )
+        const myJson = await response.json()
+        var listCommentContent = initHtml(myJson.data)
+        contentBox.after(listCommentContent)
+        myJson.data.forEach((element) => {
+            listChildComment(element.cid)
+        })
+        if (myJson.count_next > 5) {
+            lid = myJson.data[myJson.data.length - 1].cid
+        } else {
+            $(event.target).hide()
+        }
+    })
+
+    if (fieldComment.length > 0) {
+        listComment()
+    }
+
+    $('body').on('click', '.vov-account-comment button[type=submit]', function (
+        event,
+    ) {
+        event.preventDefault()
+        var form = $(event.target).closest('form')
+        var comment = form.serializeArray().find((obj) => {
+            return obj.name == 'content'
+        }).value
+        var name = form.serializeArray().find((obj) => {
+            return obj.name == 'username'
+        }).value
+        var email = form.serializeArray().find((obj) => {
+            return obj.name == 'email'
+        }).value
+        if (!comment.trim()) {
+            alert(language.comment_empty)
+        } else if (!name.trim()) {
+            alert(language.name_empty)
+        } else if (!email.trim()) {
+            alert(language.email_empty)
+        } else {
+            grecaptcha.ready(function () {
+                grecaptcha.execute('6LeA1IAmAAAAAFKDrtl_4OAKuuAuF0be9j953jLT', { action: 'submit' }).then(function (token) {
+                    $.ajax({
+                        type: 'post',
+                        url:
+                            vovAccountUrl +
+                            '/api/create-comment-vovworld?lang=' +
+                            drupalSettings.path.currentLanguage,
+                        data: form.serialize() + '&domain=vovworld.vn' + "&gresponse=" + token,
+                        beforeSend: function (xhr) {
+                            xhr.withCredentials = true
+                        },
+                        xhrFields: {
+                            withCredentials: true,
+                        },
+                        success: function () {
+                            $('#dialog').dialog({
+                                draggable: false,
+                                modal: true,
+                                title: language.title_success,
+                            })
+                            $('#dialog').html(language.message_success)
+                            setTimeout(function () {
+                                $('#dialog').dialog('close')
+                            }, 3000)
+                            $(form).find('textarea').val('')
+                            $(form).find('input[name=username]').val('')
+                            $(form).find('input[name=email]').val('')
+                            if ($(form).parent()[0] != $('#vov-social-field-comment')[0]) {
+                                $(form).parent().toggleClass('d-none')
+                            }
+                        },
+                    })
+                });
+            });
+        }
+    })
+
+    $('body').on('keyup', '.comment-form', function (event) {
+        $('.comment-form[name=username]').show()
+        $('.comment-form[name=email]').show()
+    })
+})(jQuery, drupalSettings)

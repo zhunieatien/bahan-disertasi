@@ -1,0 +1,52 @@
+jQuery(document).ready(function($) {
+
+    var $window = $(window);
+
+    function onscroll() {
+        var scroll = $(window).scrollTop();
+
+        if (scroll > 50) { 
+            $('.se-header').addClass('se-header-scrolled');
+        } else {
+            $('.se-header').removeClass('se-header-scrolled');
+        }
+    }
+
+    onscroll();
+    $(window).scroll(onscroll);
+
+    function onResize() {
+        
+        $target = $('.mh-100');
+        $footer = $('footer');
+
+        newHeight = $(window).height() - $footer.height() - parseInt($('html').css('margin-top'), 10) - 20;
+
+        $target.css({'min-height': newHeight});
+
+
+        $('.se-bl-light-item').remove();
+
+        var borderHeight = 0;
+        $targetBorder = $('.se-bl-light');
+        $targetBorder.each(function(i,e){
+            $this = $(e);
+
+            if (borderHeight < $this.height()) {
+                borderHeight = $this.height();
+            }
+
+            $this.append($('<div class="se-bl-light-item"></div>').height($this.height()));
+        });
+
+        if ($window.width() >= 768) {
+            $targetBorder.find('.se-bl-light-item').height(borderHeight);
+        } 
+        
+
+    }
+
+    onResize();
+    $(window).on('resize', onResize);
+
+});

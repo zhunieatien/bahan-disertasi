@@ -1,0 +1,68 @@
+document.addEventListener('DOMContentLoaded', function () {
+  var sidebar = document.querySelector('.latest-news-sidebar');
+  if (!sidebar) return;
+
+  var lang     = document.documentElement.lang || '';
+  var category = sidebar.dataset.category || '';
+  var nid      = sidebar.dataset.nid || '';
+
+  var latestUrl = '/api/latest-news?page=1&size=10&lang=' + lang;
+  var popularUrl = 'https://vov-api.vov.vn/api/report/most-read-pag?page=1&size=10&lang=' + lang + (category ? '&category=' + category : '') + (nid ? '&nid=' + nid : '');
+
+  fetch(latestUrl, { credentials: 'omit' })
+    .then(function (res) { return res.json(); })
+    .then(function (res) {
+      renderLatest(res.data || []);
+    })
+    .catch(function (err) {
+      console.error('[sidebar] latest fetch failed:', err);
+    });
+
+  fetch(popularUrl, { headers: { 'x-db-name': 'vov5' } })
+    .then(function (res) { return res.json(); })
+    .then(function (res) {
+      renderPopular(res.mostReadData || []);
+    })
+    .catch(function (err) {
+      console.error('[sidebar] popular fetch failed:', err);
+    });
+
+  function withLangPrefix(uri) {
+    if (!uri || lang === 'en') return uri;
+    var prefix = '/' + (lang === 'vi' ? 'vi-VN' : lang);
+    if (uri.indexOf(prefix + '/') === 0 || uri === prefix) return uri;
+    return prefix + (uri.charAt(0) === '/' ? uri : '/' + uri);
+  }
+
+  function renderLatest(items) {
+    var container = document.getElementById('sidebar-latest-list');
+    if (!container) return;
+    var html = '';
+    items.forEach(function (item) {
+      html += '<div class="d-flex align-items-start py-2 border-bottom">'
+        + '<span class="sidebar-bullet me-2 mt-1">●</span>'
+        + '<a href="' + withLangPrefix(item.uri) + '" class="fw-bold text-dark text-decoration-none text-truncate-2">'
+        + item.title
+        + '</a></div>';
+    });
+    container.innerHTML = html;
+  }
+
+  function renderPopular(items) {
+    var container = document.getElementById('sidebar-popular-list');
+    if (!container) return;
+    var html = '';
+    items.forEach(function (item) {
+      html += '<div class="d-flex gap-2 py-2 border-bottom">';
+      if (item.img_src) {
+        html += '<a href="' + item.uri + '" class="flex-shrink-0">'
+          + '<img src="' + item.img_src + '" alt="' + item.title + '" style="width:80px;height:60px;object-fit:cover;">'
+          + '</a>';
+      }
+      html += '<a href="' + item.uri + '" class="fw-bold text-dark text-decoration-none text-truncate-2 align-self-center">'
+        + item.title
+        + '</a></div>';
+    });
+    container.innerHTML = html;
+  }
+});

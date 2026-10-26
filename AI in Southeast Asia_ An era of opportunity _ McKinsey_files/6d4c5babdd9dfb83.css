@@ -1,0 +1,66 @@
+.StickySubscriptionFooter_mck-c-subscription-footer__31Vc3{border-top:var(--mdc-size-border-width-1) solid var(--mdc-color-neutral-gray-30);position:fixed;bottom:0;width:100%;z-index:var(--mdc-zindex-10);opacity:0}
+
+.StickySubscriptionFooter_mck-c-subscription-footer__wrapper__XPwPZ{padding-top:var(--mdc-size-spacing-16);padding-bottom:var(--mdc-size-spacing-16)}
+
+.StickySubscriptionFooter_mck-c-subscription-footer__form__YljZe{display:flex;flex-direction:column;gap:1rem}
+
+@media(min-width: 768px){
+.StickySubscriptionFooter_mck-c-subscription-footer__form__YljZe{justify-content:center;align-items:center}}
+
+@media(min-width: 768px){
+.StickySubscriptionFooter_mck-c-subscription-footer__form__YljZe input[name=email]{width:17rem}}
+
+.StickySubscriptionFooter_mck-c-subscription-footer__heading__IK3wO{font-size:var(--mdc-size-font-24);line-height:var(--mdc-size-line-height-36);font-family:var(--mdc-font-family-default-secondary);font-weight:var(--mdc-font-weight-medium)}
+
+.StickySubscriptionFooter_mck-c-subscription-footer__heading__IK3wO:lang(ar){font-family:var(--mdc-font-family-arabic-secondary, var(--mdc-font-family-default-secondary))}
+
+.StickySubscriptionFooter_mck-c-subscription-footer__heading__IK3wO:lang(ru){font-family:var(--mdc-font-family-russian-secondary, var(--mdc-font-family-default-secondary))}
+
+.StickySubscriptionFooter_mck-c-subscription-footer__heading__IK3wO:lang(vi){font-family:var(--mdc-font-family-vietnamese-secondary, var(--mdc-font-family-default-secondary))}
+
+.StickySubscriptionFooter_mck-c-subscription-footer__heading__IK3wO:lang(ja){font-family:var(--mdc-font-family-japanese-secondary, var(--mdc-font-family-default-secondary))}
+
+@media(min-width: 768px){
+.StickySubscriptionFooter_mck-c-subscription-footer__heading__IK3wO{font-size:var(--mdc-size-font-28);line-height:var(--mdc-size-line-height-40);text-align:center}}
+
+@media(max-width: 767px){
+[dir="ltr"] .StickySubscriptionFooter_mck-c-subscription-footer__heading__IK3wO{padding-right:var(--mdc-size-spacing-16)}
+
+[dir="rtl"] .StickySubscriptionFooter_mck-c-subscription-footer__heading__IK3wO{padding-left:var(--mdc-size-spacing-16)}}
+
+@media(min-width: 480px){
+.StickySubscriptionFooter_mck-c-subscription-footer__heading__IK3wO{text-align:center}}
+
+.StickySubscriptionFooter_mck-c-subscription-footer__subheading__HXIkn{font-size:var(--mdc-size-font-18);line-height:var(--mdc-size-line-height-28);text-align:center;display:block}
+
+@media(max-width: 479px){
+.StickySubscriptionFooter_mck-c-subscription-footer__subheading__HXIkn{display:none}}
+
+.StickySubscriptionFooter_mck-c-subscription-footer__close-button__hHJhi{position:absolute;top:var(--mdc-size-spacing-16)}
+
+[dir="ltr"] .StickySubscriptionFooter_mck-c-subscription-footer__close-button__hHJhi{right:var(--mdc-size-spacing-16)}
+
+[dir="rtl"] .StickySubscriptionFooter_mck-c-subscription-footer__close-button__hHJhi{left:var(--mdc-size-spacing-16)}
+.SubscribedFooter_mck-c-subscribed-footer__qtaQh{min-height:var(--mdc-size-spacing-64);display:flex;align-items:center}
+
+.SubscribedFooter_mck-c-subscribed-footer__content__FfH61{align-items:center}
+
+@media(max-width: 1179px){
+[dir="ltr"] .SubscribedFooter_mck-c-subscribed-footer__content__FfH61{margin-left:0}
+
+[dir="rtl"] .SubscribedFooter_mck-c-subscribed-footer__content__FfH61{margin-right:0}}
+
+@media(max-width: 767px){
+[dir="ltr"] .SubscribedFooter_mck-c-subscribed-footer__content__FfH61{padding:var(--mdc-size-spacing-16) var(--mdc-size-spacing-56) var(--mdc-size-spacing-16) var(--mdc-size-spacing-16);margin-left:0}
+
+[dir="rtl"] .SubscribedFooter_mck-c-subscribed-footer__content__FfH61{padding:var(--mdc-size-spacing-16) var(--mdc-size-spacing-16) var(--mdc-size-spacing-16) var(--mdc-size-spacing-56);margin-right:0}}
+
+.SubscribedFooter_mck-c-subscribed-footer__subscribed-text__OsT9M{display:flex;gap:var(--mdc-size-spacing-8)}
+
+.SubscribedFooter_mck-c-subscribed-footer__subscribed-text__OsT9M p{font-weight:var(--mdc-font-weight-regular)}
+
+.SubscribedFooter_mck-c-subscribed-footer__close-button__APRfL{position:absolute;top:var(--mdc-size-spacing-8);color:var(--mdc-color-neutral-white)}
+
+[dir="ltr"] .SubscribedFooter_mck-c-subscribed-footer__close-button__APRfL{right:var(--mdc-size-spacing-8)}
+
+[dir="rtl"] .SubscribedFooter_mck-c-subscribed-footer__close-button__APRfL{left:var(--mdc-size-spacing-8)}

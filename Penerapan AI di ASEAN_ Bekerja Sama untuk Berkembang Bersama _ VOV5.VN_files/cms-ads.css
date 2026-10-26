@@ -1,0 +1,12 @@
+.advertisement {
+  display: none;
+}
+
+.block-ads {
+  overflow: hidden;
+  margin: 0 auto;
+}
+
+.ads {
+  text-align: center;
+}

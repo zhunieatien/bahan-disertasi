@@ -1,0 +1,16 @@
+/**
+ * @file
+ * Custom blazy.
+ */
+
+(function ($, Drupal) {
+  'use strict';
+
+  let bLazy = new Blazy({
+      selector: '.cms-lazy',
+      successClass: 'cms-loaded',
+      errorClass: 'cms-error',
+      offset: 300
+  });
+
+})(jQuery, Drupal);

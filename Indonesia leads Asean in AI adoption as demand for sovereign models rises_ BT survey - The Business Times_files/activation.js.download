@@ -1,0 +1,2091 @@
+/**
+Summary.     Customer Data Platform Plugin for showing campaign in SPH products
+Description. Customer Data Platform(CDP) is a platform that provides the campaign for various publication for ST,BT ,ZB
+Copyright : Singapore Press Holdings Limited
+@author Anurup Borah <anuborah@sph.com.sg>
+@version 1.0.0
+*/
+
+// Create a synchronous XMLHttpRequest to load jQuery if it's not existed
+if (!window.jQuery) {
+  var xhr = new XMLHttpRequest();
+  xhr.open("GET", "https://cdp.sph.com.sg/activation/jquery-3.7.1.min.js", false); // Set the "false" flag for synchronous loading
+  xhr.send();
+
+  // Check if the request was successful
+  if (xhr.status === 200) {
+    // Evaluate the JavaScript code to load jQuery
+    eval(xhr.responseText);
+
+    // Now you can use jQuery synchronously
+    console.log("jQuery load successful");
+  }
+}
+
+// add "bh_sg" to enable VWO for BH
+var regwallAllowedDomains = [];
+
+(function ($) {
+  var CDP_PLUGIN = "CDP.plugin";
+  var CDP_DEFAULTS = {
+    cd_url: "",
+    propensity_score: "-1",
+    site_id: null,
+    access_flag: null, //it's content type :{ 0:free, 1: Premium}
+    visitor_category: 1,
+    url: window.location.href,
+    keyword: [],
+    plugin_config: {
+      gaClickEventTracking: false,
+      gaPageViewTracking: false,
+      xmlHttpConfig: {
+        method_type: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Access-Control-Allow-Origin": "*",
+        },
+      },
+      gaParams: {
+        trackingId: "UA-122397506-3",
+        campaignMedium: "web",
+        eventAction: "clicked",
+        eventCategory: "campaign",
+        bannerClickCount: 1,
+      },
+    },
+  };
+
+  function CDP(element, options) {
+    this.element = element;
+    this.$element = $(element);
+    this.options = $.extend(true, {}, CDP_DEFAULTS, options);
+  }
+
+  CDP.prototype._getHostInfoFromPath = function (url) {
+    var match = url.match(
+      /^(https?\:)\/\/(([^:\/?#]*)(?:\:([0-9]+))?)([\/]{0,1}[^?#]*)(\?[^#]*|)(#.*|)$/
+    );
+    var slugIndex = match[5].lastIndexOf("/");
+    return (
+      match && {
+        href: url,
+        protocol: match[1],
+        host: match[2],
+        hostname: match[3],
+        port: match[4],
+        pathname: match[5],
+        search: match[6],
+        hash: match[7],
+        slug: match[5].substring(0, slugIndex),
+        filename: match[5].substring(slugIndex + 1),
+      }
+    );
+  };
+
+  CDP.prototype._getSiteId = function (siteInfo) {
+    let site_id = "1";
+    let site_prefix = "st";
+    let onsite_checkout_mapping = {
+      dataTheme: "st",
+      dataClientId: "st",
+      dataLocale: "en",
+    }
+    if (siteInfo == "bt_sg") {
+      site_id = "2";
+      site_prefix = "bt";
+      onsite_checkout_mapping = {
+        dataTheme: "bt",
+        dataClientId: "bt",
+        dataLocale: "en",
+      };
+    } else if (siteInfo == "zb_sg") {
+      site_id = "3";
+      site_prefix = "zbsg";
+      onsite_checkout_mapping = {
+        dataTheme: "zb",
+        dataClientId: "zb",
+        dataLocale: "zh",
+      };
+    } else if (siteInfo == "zb_cn") {
+      site_id = "4";
+      site_prefix = "zbcn";
+      onsite_checkout_mapping = {
+        dataTheme: "zb",
+        dataClientId: "zb",
+        dataLocale: "zh",
+      };
+    } else if (siteInfo == "tm_sg") {
+      site_id = "5";
+      site_prefix = "tm";
+    } else if (siteInfo == "bh_sg") {
+      site_id = "6";
+      site_prefix = "bh";
+      onsite_checkout_mapping = {
+        dataTheme: "bh",
+        dataClientId: "bh",
+        dataLocale: "ms",
+      };
+    } else if (siteInfo == "eshop") {
+      site_id = "7";
+      site_prefix = "eshop";
+    } else if (siteInfo == "stomp") {
+      site_id = "8";
+      site_prefix = "stomp";
+    }
+    return { site_id, site_prefix, onsite_checkout_mapping };
+  };
+
+  CDP.prototype._mapCampaignTypeToClickReference = function (campaignType) {
+    const mapping = {
+      "exit_intervention": "exitintervention",
+      "reg_wall": "regwall",
+      "pay_wall": "paywall",
+      "free": "freewall",
+      "regular": "regular",
+      "metered_premium": "meteredpremium",
+      "image_banner": "imagebanner",
+    }
+    return mapping[campaignType] || campaignType || "default";
+  }
+
+  CDP.prototype._getDeepestFirstText = function (el) {
+    const firstChild = el.firstElementChild;
+    if (!firstChild) return "";
+
+    const text = firstChild.textContent.trim();
+
+    // Return text if found, otherwise recurse
+    return text !== "" ? text : this._getDeepestFirstText(firstChild);
+  }
+
+  CDP.prototype._storeOnsiteCheckoutAttributes = function (
+    onsiteElem,
+    onsiteCheckoutDetailsArray,
+    onsiteCheckoutItems,
+  ) {
+    const position = onsiteElem.getAttribute("data-ga-cta-position") ? parseInt(onsiteElem.getAttribute("data-ga-cta-position")) : 1;
+
+    onsiteCheckoutDetailsArray[position - 1] = {
+      eshopProductFamily: onsiteElem.getAttribute("data-eshop-product-family") || "",
+      eshopProductCode: onsiteElem.getAttribute("data-eshop-product-code") || "",
+      eshopPromoCode: onsiteElem.getAttribute("data-eshop-promo-code") || "",
+      eshopProductName: onsiteElem.getAttribute("data-eshop-initial-display-product-name") || "",
+      price: onsiteElem.getAttribute("data-ga-price")?.replace(/[^0-9.]+/g, "") || "",
+    };
+
+    onsiteCheckoutItems[position - 1] = {
+      item_id: onsiteCheckoutDetailsArray[position - 1].eshopProductCode,
+      item_name: onsiteCheckoutDetailsArray[position - 1].eshopProductName || null,
+      item_brand: this._getSiteId(this.options.site_id).site_prefix.toUpperCase(),
+      price: onsiteCheckoutDetailsArray[position - 1].price,
+      quantity: 1,
+    };
+  };
+
+  CDP.prototype._getGaClientId = function () {
+    if (this._getCookieValue("_ga")) {
+      const splitIdArray = this._getCookieValue("_ga")?.split(".");
+      if (splitIdArray.length < 2) {
+        return "";
+      }
+      return `${this._getSiteId(this.options.site_id).site_prefix}-${splitIdArray[splitIdArray.length - 2]}.${splitIdArray[splitIdArray.length - 1]}`;
+    }
+    return this._getCookieValue("_ga") || "";
+  };
+
+  CDP.prototype._initialiseGA4 = function (elem, campaignObj) {
+    var that = this;
+    const viewed = elem.getAttribute("data-ga-viewed");
+    const campaignType = campaignObj.campaign_type;
+    const campaignTypeForClickReference = that._mapCampaignTypeToClickReference(campaignType);
+    const onsiteCheckoutDetailsArray = [];
+    const onsiteCheckoutItems = [];
+    let isOnsiteCheckoutEnabled = false;
+
+    // if stomp site, add eventlistener to element containing poll and check if clicked element is poll option
+    if (that.options.site_id === 'stomp') {
+      elem.addEventListener('click', (e) => {
+        if (e.target.dataset.ga === 'click' && campaignObj) {
+          that._ga4Invoke({
+            action: `Click-${that._replaceSpaceWithSnakeCase(e.target.firstElementChild.textContent)}`,
+            campaignObj,
+          });
+        }
+      })
+    }
+
+    // Click events
+    const nodeList = elem.querySelectorAll("[data-ga]");
+
+    nodeList.forEach(function (el) {
+      // if data-ga='onsite-checkout' and product code exists, onsite checkout is enabled
+      if (el.getAttribute("data-ga") === "onsite-checkout" && !!el.getAttribute("data-eshop-product-code")) {
+        isOnsiteCheckoutEnabled = true;
+
+        // handle storing of onsite checkout data attr
+        that._storeOnsiteCheckoutAttributes(
+          el,
+          onsiteCheckoutDetailsArray,
+          onsiteCheckoutItems,
+        );
+
+        // add click_reference to CTA
+        el.setAttribute("data-eshop-ref", `subscribe-${campaignTypeForClickReference}`);
+      }
+
+      let clickAction = "Click";
+      const appendToClickAction = (valueToAppend) => {
+        clickAction =
+          `${clickAction}-${that._replaceSpaceWithSnakeCase(valueToAppend)}`;
+      };
+
+      // append CTA type to click action
+      const ctaType = el.getAttribute("data-ga-cta-type");
+      if (ctaType) {
+        appendToClickAction(ctaType);
+      }
+
+      // standardise login func in login element onclick
+      if (ctaType === "login" && el.tagName === "A") {
+        el.onclick = () => {
+          window.mySPHLightbox ? window.mySPHLightbox.initiateLogin() : window._mySPHObj.openLogin();
+        };
+        el.href = "javascript:;";
+      }
+
+      // Check if element has -cta-value
+      if (el.getAttribute("data-ga-cta-value")) {
+        appendToClickAction(el.getAttribute("data-ga-cta-value"));
+      } else if (el.firstElementChild) {
+        // Check if element is part of a custom campaign type
+        if (el.getAttribute("data-campaign-type")) {
+          appendToClickAction(el.getAttribute("data-campaign-type"));
+          campaignObj.campaign_type = el.getAttribute("data-campaign-type");
+        } else {
+          // Check if element is not part of image banner, retrieve textContent from child node
+          appendToClickAction(that._getDeepestFirstText(el));
+        }
+      } else {
+        // else retrieve textContent from anchor element
+        appendToClickAction(el.textContent);
+      }
+
+      /* const position = el.getAttribute("data-ga-cta-position")
+        ? el.getAttribute("data-ga-cta-position")
+        : "1"; */
+
+      el.addEventListener("click", (e) => {
+        if (
+          // check if regwallCta cookie exists on cta click
+          el.getAttribute("data-ga") === "regwall-cta" &&
+          !that._getCookieValue("regwallCtaClick") &&
+          [1, 4].includes(parseInt(window._data.visitorcat))
+        ) {
+          // create regwallCta cookie to store campaignObj lasting 15min
+          that._createCookie(
+            "regwallCtaClick",
+            JSON.stringify(campaignObj),
+            15 * 60
+          );
+        }
+
+        // call onsite checkout click event only if its onsite checkout CTA
+        if (el.getAttribute("data-ga") === "onsite-checkout" && !!el.getAttribute("data-eshop-product-code")) {
+          const position = el.getAttribute("data-ga-cta-position") ? parseInt(el.getAttribute("data-ga-cta-position")) : 1;
+          that._ga4Invoke({
+            event: "cas_add_to_cart",
+            campaignObj,
+            eshopProductCode: onsiteCheckoutDetailsArray[position - 1].eshopProductCode,
+            eshopProductFamily: onsiteCheckoutDetailsArray[position - 1].eshopProductFamily,
+            eshopProductName: onsiteCheckoutDetailsArray[position - 1].eshopProductName,
+            eshopPromoCode: onsiteCheckoutDetailsArray[position - 1].eshopPromoCode,
+            click_reference: `subscribe-${campaignTypeForClickReference}`,
+            position,
+            ecommerce: { items: [onsiteCheckoutItems[position - 1]] }
+          })
+        }
+
+        that._ga4Invoke({
+          campaignObj,
+          action: clickAction,
+          click_reference: `${ctaType}-${campaignTypeForClickReference}`,
+          position: e.currentTarget.getAttribute("data-ga-cta-position")
+            ? e.currentTarget.getAttribute("data-ga-cta-position")
+            : 1,
+          link_url: e.currentTarget.getAttribute("href"),
+        });
+      });
+
+      // add clid data attribute to the element
+      el.setAttribute("data-ga-clid", that._getGaClientId());
+    });
+
+    // Trigger Impression event only when campaign is visible in viewport
+    // Exit Intervention
+    var eiElem;
+
+    if (document.querySelector(".exit-intervention")) {
+      eiElem = elem.querySelector(".exit-intervention");
+    } else if (elem.querySelector(".modalExitIntervention")) {
+      eiElem = elem.querySelector(".modalExitIntervention");
+    } else if (elem.querySelector(".ei_modalExitIntervention")) {
+      eiElem = elem.querySelector(".ei_modalExitIntervention");
+    }
+
+    if (
+      (campaignType == "exit_intervention" || campaignType == "regular") &&
+      eiElem
+    ) {
+      let previousValue = eiElem.className;
+
+      let observer = new MutationObserver(function (mutations) {
+        mutations.forEach(function (mutation) {
+          if (mutation.attributeName !== "class") return;
+          var currentValue = mutation.target.className;
+
+          // Fire impression only if the exit intervention class name changes
+          if (currentValue !== previousValue) {
+            // Fire impression only for the first time
+            if (elem.getAttribute("data-ga-viewed") != "true") {
+              console.log("EI impression");
+              that._handleImpressionTracking(
+                {
+                  elem,
+                  campaignObj,
+                  onsiteCheckoutDetailsArray,
+                  onsiteCheckoutItems,
+                  isOnsiteCheckoutEnabled,
+                }
+              );
+            }
+
+            previousValue = mutation.target.className;
+          }
+        });
+      });
+
+      observer.observe(eiElem, { attributes: true });
+
+      // Inline Campaign
+    } else {
+      window.addEventListener(
+        "scroll",
+        that._debounce(function (event) {
+          if (that._isScrolledIntoView(elem)) {
+            if (elem.getAttribute("data-ga-viewed") != "true") {
+              console.log("Inline impression");
+              that._handleImpressionTracking(
+                {
+                  elem,
+                  campaignObj,
+                  onsiteCheckoutDetailsArray,
+                  onsiteCheckoutItems,
+                  isOnsiteCheckoutEnabled,
+                }
+              );
+            }
+          }
+        }, 250)
+      );
+    }
+
+    if (
+      ["free", "reg_wall", "pay_wall"].includes(campaignType) &&
+      campaignObj.variant
+    ) {
+      that._ga4Invoke({
+        campaignObj,
+        action: "vwo-test-assigned",
+        clickCategory: "vwo-variant",
+      });
+    }
+  };
+
+  CDP.prototype._handleImpressionTracking = function ({
+    elem,
+    campaignObj,
+    onsiteCheckoutDetailsArray,
+    onsiteCheckoutItems,
+    isOnsiteCheckoutEnabled,
+  }) {
+    this._ga4Invoke({ campaignObj, action: "Impression" });
+
+    if (isOnsiteCheckoutEnabled) {
+      const campaignTypeForClickReference = this._mapCampaignTypeToClickReference(campaignObj?.campaign_type);
+      const validDetails = onsiteCheckoutDetailsArray.filter(Boolean);
+      const validItems = onsiteCheckoutItems.filter(Boolean);
+      this._ga4Invoke({
+        event: "cas_view_item",
+        campaignObj,
+        eshopProductCode: validDetails.flatMap(detail => detail.eshopProductCode || []).join(","),
+        eshopProductFamily: validDetails.flatMap(detail => detail.eshopProductFamily || []).join("|"),
+        eshopProductName: validDetails.flatMap(detail => detail.eshopProductName || []).join(","),
+        eshopPromoCode: validDetails.flatMap(detail => detail.eshopPromoCode || []).join(","),
+        position: null,
+        click_reference: `subscribe-${campaignTypeForClickReference}`,
+        ecommerce: { items: validItems }
+      });
+    }
+
+    elem.setAttribute("data-ga-viewed", "true");
+  };
+
+  CDP.prototype._ga4Invoke = function ({
+    event = "cas_custom_ga_event",
+    eshopProductCode,
+    eshopProductFamily,
+    eshopProductName,
+    eshopPromoCode,
+    ecommerce,
+    campaignObj,
+    action,
+    click_reference,
+    position = "1",
+    link_url,
+    clickCategory,
+  }) {
+    let options = {
+      event,
+      clickCategory: clickCategory ??
+        campaignObj?.campaign_type ? "CAS-" + campaignObj?.campaign_type : undefined,
+      clickAction: action,
+      clickLabel: campaignObj?.campaign_id?.toString(),
+      position,
+      creative_id: this._getCreativeId(campaignObj?.campaign_link),
+      module_name: campaignObj?.module_name,
+      cas_campaign: campaignObj?.campaign_name,
+      campaign_priority: campaignObj?.campaign_priority?.toString(),
+      click_reference,
+      link_url,
+      vwo_variant: campaignObj?.variant,
+
+      // onsite checkout properties
+      eshopProductCode,
+      eshopProductFamily,
+      eshopProductName,
+      eshopPromoCode,
+      ecommerce,
+    };
+
+    // filter null and undefined values from options
+    // map empty onsite checkout attributes to null
+    const filteredOptions = Object.fromEntries(
+      Object.entries(options)
+        .filter(([, value]) => value != null)
+        .map(([key, value]) => [key, value === "" ? null : value])
+    );
+
+    window.dataLayer = window.dataLayer || [];
+    // reset datalayer object before cas_view_item and cas_add_to_cart event
+    if (["cas_view_item", "cas_add_to_cart"].includes(event)) {
+      window.dataLayer.push({
+        eshopProductCode: null,
+        eshopProductFamily: null,
+        eshopProductName: null,
+        eshopPromoCode: null,
+        ecommerce: null,
+      });
+    }
+    window.dataLayer.push(filteredOptions);
+  };
+
+  CDP.prototype._isScrolledIntoView = function (_elem) {
+    const docViewTop = $(window).scrollTop();
+    const docViewBottom = docViewTop + $(window).height();
+
+    const elemTop = $(_elem).offset().top;
+    const elemBottom = elemTop + $(_elem).height();
+
+    // console.log(_elem, docViewBottom, elemTop);
+
+    return docViewBottom >= elemTop;
+  };
+
+  CDP.prototype._createLinkElem = function (_linkObj) {
+    var linkElement = document.createElement("a");
+    linkElement.setAttribute("target", "_blank");
+    linkElement.href = _linkObj.campaign_link ? _linkObj.campaign_link : "";
+    this._ga4Invoke({ campaignObj: linkElement, action: _linkObj });
+    return linkElement;
+  };
+
+  CDP.prototype._setGACustomParameter = function (_gaObj) {
+    var bannerPathInfo = this._getHostInfoFromPath(_gaObj.campaign_link);
+    //let siteInfo = this.options.site_id.split("_");
+
+    let gaClientId = this._getCookieValue("_ga");
+    gaClientId = gaClientId.substring(6) + "."; //add "." at the back to keep value as string format in BQ
+
+    console.log(gaClientId);
+
+    return {
+      trackingId: this.options.plugin_config.gaParams.trackingId,
+      clientId: gaClientId,
+      hostname: bannerPathInfo.hostname,
+      page: bannerPathInfo.slug,
+      title: bannerPathInfo.filename,
+      //'campaignSource': siteInfo[0],
+      campaignSource: this.options.site_id,
+      campaignMedium: this.options.plugin_config.gaParams.campaignMedium,
+      campaignName: _gaObj.campaign_id,
+      dimension3: this._getArticleId(),
+      dimension4: this._getMySPHId(),
+      dimension6: gaClientId,
+      dimension7: this._getContentCat(),
+      dimension8: this._getContentType(),
+      dimension15: window.location.href,
+      dimension19: this._getMySPHId(),
+      referrer: window.location.hostname,
+      dimension93: _gaObj.campaign_id,
+      dimension95:
+        this._getCookieValue("suid") || this._getFallbackCookieValue(),
+    };
+  };
+
+  CDP.prototype._gaClickEventTracking = function (_gaObj, _gaTags) {
+    if (_gaObj != undefined && _gaObj != null) {
+      if (
+        _gaObj.eventAction !== undefined &&
+        _gaObj.eventCategory !== undefined
+      ) {
+        var eventObJs = {
+          hitType: "event",
+          metric1: _gaObj.bannerClickCount,
+          eventCategory: _gaObj.eventCategory,
+          eventAction: _gaObj.eventAction,
+          eventLabel: _gaTags.campaignName,
+        };
+        const _gaEventObj = { ...eventObJs, ..._gaTags };
+        ga("send", "event", _gaEventObj);
+      }
+    }
+  };
+
+  CDP.prototype._gaPageViewTracking = function (_gaTags) {
+    if (_gaTags.campaignName != undefined && _gaTags.page != undefined) {
+      ga("send", "pageview", _gaTags);
+    }
+  };
+
+  CDP.prototype._addImageCampaign = function (_imageObj) {
+    var $element = this.$element;
+    var linkElement = this._createLinkElem(_imageObj);
+    var elem = document.createElement("img");
+    elem.setAttribute("src", _imageObj.campaign_link);
+    linkElement.appendChild(elem);
+    document.getElementById($element[0].id).appendChild(linkElement);
+  };
+
+  CDP.prototype._debounce = function (fn, delay) {
+    var timer = null;
+    return function () {
+      var context = this,
+        args = arguments;
+      clearTimeout(timer);
+      timer = setTimeout(function () {
+        fn.apply(context, args);
+      }, delay);
+    };
+  };
+
+  CDP.prototype._generateRandom = function (length) {
+    var result = "";
+    var characters =
+      "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+    var charactersLength = characters.length;
+    for (var i = 0; i < length; i++) {
+      result += characters.charAt(Math.floor(Math.random() * charactersLength));
+    }
+    return result;
+  };
+
+  CDP.prototype._getCookieValue = function (name) {
+    match = document.cookie.match(new RegExp("(^|; )" + name + "=([^;]*)"));
+    if (match) return match[2];
+  };
+
+  /**
+   * @param {String} name The name of the cookie
+   * @param {String} value The value of the cookie
+   * @param {Number} seconds The expiry in seconds of the cookie
+   */
+  CDP.prototype._createCookie = function (name, value, seconds) {
+    var date, expires;
+    if (seconds) {
+      date = new Date();
+      date.setSeconds(date.getSeconds() + seconds);
+      expires = "; expires=" + date.toUTCString();
+    } else {
+      expires = "";
+    }
+    document.cookie = name + "=" + value + expires + "; path=/";
+  };
+
+  CDP.prototype._replaceSpaceWithSnakeCase = function (text) {
+    return text.split(" ").join("_");
+  };
+
+  // Generate random id
+  CDP.prototype._generateRandomId = function (length) {
+    var result = "";
+    var characters = "abcdefghijklmnopqrstuvwxyz0123456789";
+    var charactersLength = characters.length;
+    for (var i = 0; i < length; i++) {
+      result += characters.charAt(Math.floor(Math.random() * charactersLength));
+    }
+    return result;
+  };
+
+  // Generate free article view count cookie
+  CDP.prototype._handleFreeArticleViewCount = function () {
+    if (
+      ["1", "free"].includes(window._data.contentcat) &&
+      window._data.articleid !== "" &&
+      [1, 4].includes(parseInt(window._data.visitorcat))
+    )
+      if (this._getCookieValue("freeArticleViewCount")) {
+        const viewCount = Number(this._getCookieValue("freeArticleViewCount"));
+        this._createCookie(
+          "freeArticleViewCount",
+          String(viewCount + 1),
+          60 * 24 * 60 * 60
+        );
+      } else {
+        this._createCookie("freeArticleViewCount", "1", 60 * 24 * 60 * 60);
+      }
+  };
+
+  // Generate fallback suid cookie
+  CDP.prototype._generateFallbackSuid = function () {
+    const prefix = "EASDEF";
+    const fallbackSuid = prefix + this._generateRandomId(32);
+    this._createCookie("fallbacksuid", fallbackSuid, 400 * 24 * 60 * 60);
+  };
+
+  // Try to get the fallbacksuid cookie value if it exists, else generate the fallbacksuid cookie
+  CDP.prototype._getFallbackCookieValue = function () {
+    if (this._getCookieValue("fallbacksuid")) {
+      return this._getCookieValue("fallbacksuid");
+    } else {
+      this._generateFallbackSuid();
+      return this._getCookieValue("fallbacksuid");
+    }
+  };
+
+  CDP.prototype._getMySPHId = function () {
+    let mySPHId = "";
+    // mySPH ID from _data object on article page
+    if (
+      typeof window._data !== "undefined" &&
+      window._data.hasOwnProperty("at")
+    ) {
+      mySPHId = decodeURIComponent(window._data.at);
+    }
+
+    return mySPHId;
+  };
+
+  CDP.prototype._getArticleId = function () {
+    let articleId = "";
+    // Article ID from _data object on article page
+    if (typeof window._data !== "undefined" && window._data.articleid > 1) {
+      articleId = window._data.articleid;
+    }
+
+    return articleId;
+  };
+
+  CDP.prototype._getKeywords = function () {
+    let keywords = [];
+    if (
+      typeof window._data !== "undefined" &&
+      window._data.hasOwnProperty("keyword") &&
+      window._data.keyword.length > 0
+    ) {
+      keywords = window._data.keyword.toUpperCase().split(",");
+    }
+
+    if (keywords.length === 0) {
+      keywords = ["."];
+    }
+
+    return keywords;
+  };
+
+  CDP.prototype._getContentCat = function () {
+    /**
+     * Possible values
+     * 1 - free
+     * 2 - premium
+     * default - free
+     **/
+    const contentCats = ["free", "premium"];
+
+    // Default to 'free'
+    let contentCat = contentCats[0];
+
+    // Content Cat from _data object on article page
+    if (
+      typeof window._data !== "undefined" &&
+      window._data.hasOwnProperty("contentcat")
+    ) {
+      const parsed = parseInt(window._data.contentcat);
+
+      if (isNaN(parsed)) {
+        return contentCat;
+      } else {
+        switch (parsed) {
+          case 1:
+          default:
+            contentCat = contentCats[0];
+            break;
+          case 2:
+            contentCat = contentCats[1];
+            break;
+        }
+      }
+    }
+
+    return contentCat;
+  };
+
+  CDP.prototype._getContentType = function () {
+    /**
+     * Possible values
+     * 1 or "article" - article
+     * 2 or "photo" - photo
+     * 3 or "video" - video
+     * default - listing
+     **/
+    const contentTypes = ["article", "photo", "video", "listing"];
+
+    // Default to 'listing'
+    let contentType = contentTypes[3];
+
+    // Content Type from _data object on article page
+    if (
+      typeof window._data !== "undefined" &&
+      window._data.hasOwnProperty("contenttype")
+    ) {
+      const dataLayerContentType = window._data.contenttype;
+
+      // If value is the named article type
+      if (contentTypes.includes(dataLayerContentType)) {
+        return dataLayerContentType;
+      }
+
+      const parsed = parseInt(dataLayerContentType);
+
+      if (isNaN(parsed)) {
+        return contentType;
+      }
+
+      // If value is the integer associated with the article type
+      switch (parsed) {
+        case 1:
+          contentType = contentTypes[0];
+          break;
+        case 2:
+          contentType = contentTypes[1];
+          break;
+        case 3:
+          contentType = contentTypes[2];
+          break;
+        default:
+          contentType = contentTypes[3];
+          break;
+      }
+    }
+
+    return contentType;
+  };
+
+  CDP.prototype._isEmpty = function (obj) {
+    for (var key in obj) {
+      return false;
+    }
+    return true;
+  };
+
+  CDP.prototype._isUserLoggedin = function () {
+    var that = this;
+    return !that._isEmpty(
+      JSON.parse(localStorage.getItem("okta-token-storage"))
+    );
+  };
+
+  CDP.prototype._getVisitorCatFromJwt = function () {
+    var that = this;
+    const serviceFlags = {
+      bt_sg: [
+        "bt_all",
+        "bt_sphone",
+        "bt_tablet",
+        "bt_trial_all",
+        "bt_trial_sphone",
+        "bt_trial_tablet",
+        "bts",
+        "bts_trial",
+        "kbt_tablet",
+      ],
+      bh_sg: [
+        "bh tablet",
+        "bh_all",
+        "bh_online",
+        "bh_online_trial",
+        "bh_sphone",
+        "bh_tablet",
+        "bh_trial_all",
+        "bh_trial_sphone",
+        "bh_trial_tablet",
+        "kbh_tablet",
+      ],
+      tm_sg: [
+        "cir_tm_online",
+        "cir_tm_online_trial",
+        "ktm_tablet",
+        "tm_online",
+        "tm_all",
+        "tm_sphone",
+        "tm_tablet",
+        "tm_trial_all",
+        "tm_trial_sphone",
+        "tm_trial_tablet",
+      ],
+    };
+
+    const jwt = JSON.parse(localStorage.getItem("okta-token-storage"))
+      ?.accessToken?.accessToken;
+    if (!jwt && typeof jwt !== "string") return 1;
+
+    // get service_flags from jwt token from okta
+    const serviceFlagsFromJwt = jwtUtils.jwtDecode(jwt)?.service_flags;
+
+    if (
+      serviceFlagsFromJwt.includes("bh_geng") &&
+      that.options.site_id === "bh_sg"
+    )
+      return 15;
+
+    // check if there are subscriber flags in jwt service_flags array
+    const intersectingFlags = serviceFlagsFromJwt.filter(
+      (flag) => serviceFlags[that.options.site_id].indexOf(flag) !== -1
+    );
+
+    // if jwt has subscriber flags, user is subscriber
+    if (intersectingFlags.length > 0) return 2;
+
+    // if jwt no subscriber flags, user is registered
+    return 3;
+  };
+
+  CDP.prototype._getVisitorCategory = function () {
+    var that = this;
+
+    // check if user is logged in
+    if (!that._isUserLoggedin()) return 1;
+
+    return that._getVisitorCatFromJwt();
+  };
+
+  CDP.prototype._addHTMLCampaign = function (_htmlObj) {
+    var that = this;
+    this.options.plugin_config.xmlHttpConfig.method_type = "GET";
+    var objUrl = _htmlObj.campaign_link;
+    //objUrl+="?" + this._generateRandom(10);
+
+    // Assign campaign ID to window object for use by other components
+    window.campaign_id = _htmlObj.campaign_id;
+
+    // Assign metered premium article values to window object for use by other components
+    window.mpaValues = { x: _htmlObj.x, y: _htmlObj.y };
+
+    // Assign articles fully consumed flag to window object for use by other components
+    if (that._articlesFullyConsumed(_htmlObj.preview_html)) {
+      window.articlesFullyConsumed = true;
+    }
+
+    // if logged in as registered user and regwallCta cookie exists, fire GA and delete regwallCta cookie
+    if (
+      that._getCookieValue("regwallCtaClick") &&
+      that._getVisitorCategory() === 3
+    ) {
+      // retrieve htmlObj from cookie, invoke GA event then delete cookie
+      that._ga4Invoke({
+        campaignObj: JSON.parse(that._getCookieValue("regwallCtaClick")),
+        action: "login-signup-success",
+        clickCategory: "vwo-variant",
+      });
+      that._createCookie("regwallCtaClick", "deleted", -99999);
+    }
+
+    if (objUrl != null) {
+      this.call(objUrl, this.options, function (request_data) {
+        // Inject campaign creative
+        $(that.element)
+          .append(request_data)
+          .ready(function () {
+            // GA 4
+            that._initialiseGA4(that.element, _htmlObj);
+
+            if (_htmlObj.campaign_type === "metered_premium") {
+              // Metered Premium Article campaign - Inject full article content
+              that._meteredPremiumArticleCampaign(_htmlObj);
+            }
+
+            if (
+              _htmlObj.variant !== null &&
+              (
+                _htmlObj.campaign_type === "free" ||
+                _htmlObj.campaign_type === "reg_wall" ||
+                _htmlObj.campaign_type === "image_banner"
+              ) &&
+              regwallAllowedDomains.includes(that.options.site_id)
+            ) {
+              // free or reg wall campaign - Handle free article view count cookie
+              that._handleFreeArticleViewCount();
+            }
+
+            // dispatch event on CAS campaign load completion
+            const event = new CustomEvent("CASCampaignLoaded", {
+              loaded: true,
+            });
+            document.dispatchEvent(event);
+          });
+      });
+    }
+
+    function handleEngagementFormEvents(e) {
+      let allowedHosts = [
+        "straitstimes.com",
+        "businesstimes.com.sg",
+        "zaobao.com.sg",
+        "tamilmurasu.com.sg",
+        "beritaharian.com.sg",
+        "s0.2mdn.net",
+      ];
+      let hostname = new URL(e.origin).hostname;
+
+      if (allowedHosts.includes(hostname) && e.data?.form_id) {
+        console.log("submit user response");
+
+        let payload = {
+          ...e.data,
+          mysph_visitor_id: encodeURIComponent(that._getMySPHId()),
+          suid:
+            encodeURIComponent(that._getCookieValue("suid")) ||
+            that._getFallbackCookieValue(),
+        };
+
+        console.log(payload);
+
+        fetch("https://martech-engagement-form.prd.ems.sphdigital.com.sg/api/submit", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(payload),
+        });
+      }
+    }
+
+    // Listen for engagement form submission events
+    addEventListener("message", handleEngagementFormEvents, true);
+  };
+
+  // Gets the creative id
+  CDP.prototype._getCreativeId = function (page_location) {
+    if (page_location) {
+      var creative_id = page_location.substring(
+        page_location.indexOf("creatives/") + 10,
+        page_location.lastIndexOf("/preview.html")
+      );
+      return creative_id;
+    }
+    return null;
+  };
+
+  CDP.prototype._meteredPremiumArticleCampaign = function (_htmlObj) {
+    var that = this;
+    var site_id = that._getSiteId(that.options.site_id).site_id;
+    var preview_html = _htmlObj.preview_html;
+
+    // Hide Drupal paywall if it exists
+    $("#nocx_paywall_area").hide(); // ST
+    $("#cx_custom").hide(); // BT
+
+    // Exit if there is no full article content to display
+    if (that._articlesFullyConsumed(preview_html)) return;
+
+    // Parse full article string and convert it to a jQuery object
+    var jsonString = JSON.stringify(preview_html),
+      json = JSON.parse(jsonString),
+      obj = JSON.parse(json),
+      $fullArticle = $($.parseHTML("<div>" + obj.full_body + "</div>"));
+
+    // Load full premium article
+    switch (site_id) {
+      case "1":
+        that._loadFullSTPremiumArticle($fullArticle);
+        break;
+      case "2":
+        that._loadFullBTPremiumArticle($fullArticle);
+        break;
+    }
+  };
+
+  CDP.prototype._loadFullSTPremiumArticle = function ($fullArticle) {
+    var that = this;
+
+    // Remove the first instance of .ads.clearleft from the full article
+    $fullArticle.find(".ads.clearleft").first().remove();
+
+    // Remove first 3 paragraphs from the full article and create a reference
+    var $firstThreeParagraphs = $fullArticle.find("div:first p:lt(3)").remove();
+
+    var $firstThreeParagraphsContainer = $(
+      $.parseHTML(
+        "<div class='layout layout--onecol'><div class='layout__region layout__region--content'><div class='clearfix text-formatted field field--name-field-paragraph-text field--type-text-long field--label-hidden field__item'></div></div></div>"
+      )
+    );
+
+    // Add first three paragraphs into the transitionary container
+    $firstThreeParagraphsContainer
+      .find(".field__item")
+      .append($firstThreeParagraphs);
+
+    // Move paywall to the bottom of the full article
+    var $paywall = $(".article-content-rawhtml [id^=sph_cdp]").remove();
+
+    // Remove preview content
+    $(".ds-field-item").find("div:first").remove();
+
+    // Add first three paragraphs to the page
+    $(".ds-field-item").prepend($firstThreeParagraphsContainer);
+
+    // Append full article content and paywall to the page after imu1 ad
+    $(".ds-field-item").append($fullArticle);
+    $(".ds-field-item").append($paywall);
+
+    // Refresh middle of article ads
+    that._refreshSTAds();
+  };
+
+  CDP.prototype._loadFullBTPremiumArticle = function ($fullArticle) {
+    var that = this;
+    var articleContainerClass = " ";
+
+    if (window.meteredPremiumArticleIndex != undefined) {
+      // The div wrapper running index class name for all dynamically loaded articles
+      articleContainerClass =
+        ".index-" + window.meteredPremiumArticleIndex + " ";
+    }
+
+    // Add styling
+    $fullArticle.addClass(
+      "body mt-4 article-content-rawhtml font-public-sans fs-5125 fw-300"
+    );
+
+    // Remove imu1 ad from the full article content as imu1 already exists on the page
+    $fullArticle.find("#dfp-ad-imu1").remove();
+
+    // Move paywall to the bottom of the full article
+    var $paywall = $(
+      articleContainerClass + ".field-name-field-ds-eas-paywall"
+    ).remove();
+
+    // Move Keywords section to the bottom of the full article
+    var $keywords = $(articleContainerClass + ".ds-articles-keywords").remove();
+
+    // Remove preview content
+    var $previewContent = $(
+      articleContainerClass + ".article-content-rawhtml p"
+    ).remove();
+
+    // Remove first X paragraphs from the full article and create a reference
+    var $firstXParagraphs = $fullArticle
+      .find("div:first p:lt(" + $previewContent.length + ")")
+      .remove();
+
+    // Add margin before imu1 ad
+    $($firstXParagraphs[$firstXParagraphs.length - 1]).css(
+      "margin-bottom",
+      "20px"
+    );
+
+    // Add first X paragraphs to the page
+    $(articleContainerClass + ".article-content-rawhtml").prepend(
+      $firstXParagraphs
+    );
+
+    // Add styling
+    $(articleContainerClass + ".article-content-rawhtml").addClass(
+      "body mt-4 font-public-sans fs-5125 fw-300"
+    );
+
+    // Append Keywords section to full article
+    $fullArticle.append($keywords);
+
+    // Append paywall to full article
+    $fullArticle.append($paywall);
+
+    // Append full article content to the page after imu1 ad
+    $fullArticle.insertAfter(articleContainerClass + ".ds-imu1-article-page");
+
+    // Update midarticlespecial id for dynamically loaded articles
+    if (window.meteredPremiumArticleIndex != undefined) {
+      $(".index-" + window.meteredPremiumArticleIndex)
+        .find("#dfp-ad-midarticlespecial")
+        .attr(
+          "id",
+          "dfp-ad-midarticlespecial-" + window.meteredPremiumArticleIndex
+        );
+    }
+
+    // Refresh middle of article ads
+    that._refreshBTAds();
+
+    // Increment metered premium article index
+    window.meteredPremiumArticleIndex != undefined
+      ? window.meteredPremiumArticleIndex++
+      : (window.meteredPremiumArticleIndex = 0);
+  };
+
+  // Check if the registered user has fully consumed their alloted free premium articles
+  // for Metered Premium Article campaigns
+  CDP.prototype._articlesFullyConsumed = function (preview_html) {
+    if (typeof preview_html === "string" && preview_html.length === 0) {
+      return true;
+    }
+  };
+
+  /**
+   * Refreshes ads on the article after the full article content has been dynamically loaded
+   */
+  CDP.prototype._refreshSTAds = function () {
+    // midarticlespecial
+    if (document.getElementById("dfp-ad-midarticlespecial")) {
+      googletag.cmd.push(function () {
+        var slotId = "midarticlespecial";
+        googletag.slots[slotId] = googletag
+          .defineSlot(
+            "/5908/st/midarticlespecial/" + window._data["chapter1"],
+            [[1, 1], [300, 250], "fluid"],
+            "dfp-ad-midarticlespecial"
+          )
+          //.setCollapseEmptyDiv(true, true)
+          .addService(googletag.pubads())
+          .setTargeting("pos", "midarticlespecial")
+          .setTargeting("stprint", "Off")
+          .setTargeting("weight", "4");
+
+        googletag.display("dfp-ad-midarticlespecial");
+        googletag
+          .pubads()
+          .refresh([googletag.slots[slotId]], { changeCorrelator: true });
+      });
+    }
+
+    // midarticlespecial2
+    if (document.getElementById("dfp-ad-midarticlespecial2")) {
+      googletag.cmd.push(function () {
+        var slotId = "midarticlespecial2";
+        googletag.slots[slotId] = googletag
+          .defineSlot(
+            "/5908/st/midarticlespecial2/" + window._data["chapter1"],
+            [[1, 1], [300, 250], "fluid"],
+            "dfp-ad-midarticlespecial2"
+          )
+          //.setCollapseEmptyDiv(true, true)
+          .addService(googletag.pubads())
+          .setTargeting("pos", "midarticlespecial2")
+          .setTargeting("stprint", "Off")
+          .setTargeting("weight", "4");
+
+        googletag.display("dfp-ad-midarticlespecial2");
+        googletag
+          .pubads()
+          .refresh([googletag.slots[slotId]], { changeCorrelator: true });
+      });
+    }
+  };
+
+  CDP.prototype._refreshBTAds = function () {
+    var that = this;
+    var scope = "";
+
+    // Derive the latest dynamically loaded midarticlespecial ad index for which we need to refresh
+    if (window.meteredPremiumArticleIndex != undefined) {
+      scope = "-" + window.meteredPremiumArticleIndex.toString();
+    }
+
+    googletag.cmd.push(function () {
+      var slotId = "midarticlespecial" + scope;
+      var elemId = "dfp-ad-midarticlespecial" + scope;
+      var adUnit = "/5908/bt/midarticlespecial/";
+
+      googletag.slots[slotId] = googletag
+        .defineSlot(
+          adUnit + that._getArticlePath(),
+          [
+            [1, 1],
+            "fluid",
+            [640, 480],
+            [300, 169],
+            [300, 225],
+            [480, 270],
+            [480, 360],
+            [640, 360],
+          ],
+          elemId
+        )
+        .setCollapseEmptyDiv(true, true)
+        .addService(googletag.pubads())
+        .setTargeting("pos", "midarticlespecial")
+        .setTargeting("bttags", that._getKeywords())
+        .setTargeting("btarticleid", that._getArticleId())
+        .setTargeting("gs_channels", that._getBTAdChannels(scope))
+        .setTargeting("weight", "4");
+      googletag.display(elemId);
+      googletag
+        .pubads()
+        .refresh([googletag.slots[slotId]], { changeCorrelator: true });
+    });
+  };
+
+  CDP.prototype._getArticlePath = function () {
+    var article_path = window.location.pathname;
+    var path_array = article_path.split("/");
+    if (path_array.length >= 3) {
+      article_path = path_array[1] + "/" + path_array[2];
+    }
+    return article_path;
+  };
+
+  CDP.prototype._getBTAdChannels = function (scope) {
+    var gsChannels = $("#infinite-start-" + scope.urlIndex).text();
+    var channelsList = ["no_category"];
+    if (gsChannels != "") {
+      channelsList = gsChannels.split("','");
+    }
+    return channelsList;
+  };
+
+  /**
+   * Removes the specified keys and returns the filtered object
+   * @param {Object} params The object to filter
+   * @param {Array<String>} filter_keys The array of keys to remove
+   * @returns Returns the filtered object
+   */
+  CDP.prototype._filterParams = function (params, filter_keys) {
+    for (var key in params) {
+      if (filter_keys.includes(key)) {
+        delete params[key];
+      }
+    }
+    return params;
+  };
+
+  CDP.prototype._addClickstreamDataAttributes = function (
+    module_id,
+    campaign_obj
+  ) {
+    $("#sph_cdp_" + module_id).attr(
+      "data-sdkids-campaignname",
+      campaign_obj.campaign_name
+    );
+    $("#sph_cdp_" + module_id).attr(
+      "data-sdkids-campaignid",
+      campaign_obj.campaign_id
+    );
+    $("#sph_cdp_" + module_id).attr(
+      "data-sdkids-campaigntype",
+      campaign_obj.campaign_type
+    );
+    $("#sph_cdp_" + module_id).attr(
+      "data-sdkids-creativeid",
+      this._getCreativeId(campaign_obj.campaign_link)
+    );
+    $("#sph_cdp_" + module_id).attr(
+      "data-sdkids-scarletFormID",
+      campaign_obj.scarlet_form_id
+    );
+    console.log("VWO VARIANT: " + campaign_obj.variant);
+    if (campaign_obj.variant)
+      $("#sph_cdp_" + module_id).attr(
+        "data-sdkids-vwo-variant",
+        campaign_obj.variant
+      );
+  };
+
+  CDP.prototype._addOnsiteCheckoutBundle = function (onsite_checkout_mapping) {
+    // conditionally append eshop checkout div to body
+    const eshopCheckoutDivExists = document.getElementById('eshop-checkout');
+    if (!eshopCheckoutDivExists) {
+      const eshopCheckoutDiv = document.createElement('div');
+      eshopCheckoutDiv.id = 'eshop-checkout';
+      eshopCheckoutDiv.setAttribute("data-theme", onsite_checkout_mapping.dataTheme);
+      eshopCheckoutDiv.setAttribute("data-client-id", onsite_checkout_mapping.dataClientId);
+      eshopCheckoutDiv.setAttribute("data-locale", onsite_checkout_mapping.dataLocale);
+      document.body.appendChild(eshopCheckoutDiv);
+    }
+
+    // Ensure script load completion can be awaited before activation service call.
+    return new Promise((resolve) => {
+      const SCRIPT_LOAD_TIMEOUT = 5000;
+      const onsiteScript = document.querySelector('script[src="https://remote.subscribe.sph.com.sg/onsite-checkout/1.x.x/js/loader.js"]');
+      let timeoutId;
+
+      const finish = function () {
+        if (timeoutId) {
+          clearTimeout(timeoutId);
+        }
+        resolve();
+      };
+
+      const markAndFinish = function (scriptEl, status) {
+        scriptEl.dataset.loaded = status;
+        finish();
+      };
+
+      // Check if onsite script is already present in the page.
+      if (onsiteScript) {
+        const scriptStatus = onsiteScript.dataset.loaded;
+        if (scriptStatus === "loaded" || scriptStatus === "error") {
+          finish();
+          return;
+        }
+
+        timeoutId = setTimeout(function () {
+          markAndFinish(onsiteScript, "error");
+        }, SCRIPT_LOAD_TIMEOUT);
+
+        onsiteScript.addEventListener('load', function () {
+          markAndFinish(onsiteScript, "loaded");
+        }, { once: true });
+        onsiteScript.addEventListener('error', function () {
+          markAndFinish(onsiteScript, "error");
+        }, { once: true });
+      } else {
+        // if onsite script not present, load onsite script
+        const eshopCheckoutScript = document.createElement('script');
+        eshopCheckoutScript.src = "https://remote.subscribe.sph.com.sg/onsite-checkout/1.x.x/js/loader.js";
+        eshopCheckoutScript.type = 'module';
+
+        timeoutId = setTimeout(function () {
+          // Mark script as error to prevent future calls from waiting again
+          markAndFinish(eshopCheckoutScript, "error");
+        }, SCRIPT_LOAD_TIMEOUT);
+
+        eshopCheckoutScript.addEventListener('load', function () {
+          markAndFinish(eshopCheckoutScript, "loaded");
+        }, { once: true });
+        eshopCheckoutScript.addEventListener('error', function () {
+          markAndFinish(eshopCheckoutScript, "error");
+        }, { once: true });
+        document.head.appendChild(eshopCheckoutScript);
+      }
+    });
+  };
+
+  /**
+   * This function calls the activation service endpoint to query for campaigns
+   */
+  CDP.prototype.run = function () {
+    //Your ajax function will go here
+    var that = this;
+    var params = Object.assign({}, this.options);
+    var module_id = params.module_id;
+    params = this._filterParams(params, [
+      "plugin_config",
+      "cd_url",
+    ]);
+
+    const siteInfo = that._getSiteId(that.options.site_id);
+    const shouldLoadOnsiteCheckoutBundle = ["st_sg", "bt_sg", "zb_sg", "zb_cn", "bh_sg"].includes(that.options.site_id);
+
+    const callActivationService = function () {
+      // Call Activation Service
+      that.call(that.options.cd_url, params, function (request_param) {
+        var obj = JSON.parse(request_param);
+
+        // Add campaign creative to the page (if any)
+        that._addHTMLCampaign(obj);
+
+        // Add campaign data attributes to campaign container for Neuron tracking
+        that._addClickstreamDataAttributes(module_id, obj);
+      });
+    };
+
+    if (shouldLoadOnsiteCheckoutBundle) {
+      that._addOnsiteCheckoutBundle(siteInfo.onsite_checkout_mapping).then(callActivationService);
+      return;
+    }
+
+    callActivationService();
+  };
+
+  CDP.prototype.call = function (url, params, callback) {
+    //Your ajax function will go here
+    var that = this;
+    var xmlhttp = window.XMLHttpRequest
+      ? new XMLHttpRequest()
+      : new ActiveXObject("Microsoft.XMLHTTP");
+    xmlhttp.onreadystatechange = function () {
+      this.readyState == 4 && this.status == 200
+        ? callback(this.responseText)
+        : {};
+    };
+
+    xmlhttp.open(
+      params.hasOwnProperty("Data")
+        ? "PUT"
+        : this.options.plugin_config.xmlHttpConfig.method_type,
+      url,
+      true
+    );
+    let headers = this.options.plugin_config.xmlHttpConfig.headers;
+    headers["x-api-key"] = params.api_key || params.Data.api_key;
+
+    // if (params.hasOwnProperty("api_key")) delete params.api_key;
+    if (params.hasOwnProperty("Data")) {
+      delete params.Data.api_key;
+      delete headers["Access-Control-Allow-Origin"];
+    }
+
+    if (params.module_id != null && params.module_id != undefined) {
+      // Ensure type is string
+      params["module_id"] = params["module_id"].toString();
+
+      // Transform module id value if it has a trailing index - e.g. "636_1" (Used in BT infinite scroll articles)
+      // Remove the trailing index
+      if (params["module_id"].indexOf("_") > -1) {
+        params["module_id"] = params["module_id"].slice(
+          0,
+          params["module_id"].indexOf("_")
+        );
+      }
+      // Exit function immediately if both module_id and Data object is not present
+    } else if (!params.hasOwnProperty("Data")) {
+      return;
+    }
+
+    if (!that._isEmpty(headers)) {
+      for (let key in headers) {
+        xmlhttp.setRequestHeader(key, headers[key]);
+      }
+    }
+
+    var postParams = JSON.stringify(params);
+    xmlhttp.send(postParams);
+  };
+
+  $.fn.cdp = function (options) {
+    if (options === undefined || typeof options === "object") {
+      return this.each(function () {
+        if (!$(this).data(CDP_PLUGIN)) {
+          $(this).data(CDP_PLUGIN, new CDP(this, options));
+        }
+      });
+    } else if (typeof options === "string" && options[0] !== "_") {
+      var args = Array.prototype.slice.call(arguments, 1);
+      return this.each(function () {
+        var plugin = $(this).data(CDP_PLUGIN);
+        if (plugin instanceof CDP && typeof plugin[options] === "function") {
+          plugin[options].apply(plugin, args);
+        }
+        return $(this);
+      });
+    }
+  };
+})(jQuery);
+
+var SPHWave_Wrap = function () {
+  try {
+    //Get Cookie
+    var get_cookie_value = function (name) {
+      match = document.cookie.match(new RegExp("(^|; )" + name + "=([^;]*)"));
+      if (match) return match[2];
+    };
+
+    var paramsObj = {};
+    var cdp_params = {};
+    var suid = get_cookie_value("suid") || false;
+    var runQueued = false;
+
+    var isEmpty = function (obj) {
+      for (var key in obj) {
+        return false;
+      }
+      return true;
+    };
+
+    // Generate random id
+    this.generateRandomId = function (length) {
+      var result = "";
+      var characters = "abcdefghijklmnopqrstuvwxyz0123456789";
+      var charactersLength = characters.length;
+      for (var i = 0; i < length; i++) {
+        result += characters.charAt(
+          Math.floor(Math.random() * charactersLength)
+        );
+      }
+      return result;
+    };
+
+    this.prepareData = function () {
+      console.log("prepare CDP data");
+
+      //get chapter data
+      var get_section_data = function () {
+        let sectionArr = [];
+        let section_to_includes = "";
+        var site_id =
+          paramsObj.default_site_id ?? get_site_id(window.location.hostname);
+
+        // Each publication's section taxonomy is stored in the _data object's attributes differently
+        switch (site_id) {
+          default:
+          case "st_sg":
+            if (window._data.chapter1) {
+              section_to_includes = window._data.chapter1;
+              sectionArr.push(section_to_includes.toLowerCase());
+            }
+            if (window._data.chapter2) {
+              section_to_includes += "/" + window._data.chapter2;
+              sectionArr.push(section_to_includes.toLowerCase());
+            }
+            if (window._data.chapter3) {
+              section_to_includes += "/" + window._data.chapter3;
+              sectionArr.push(section_to_includes.toLowerCase());
+            }
+            break;
+
+          case "zb_sg":
+            if (window._data.level2_local) {
+              section_to_includes = window._data.level2_local;
+              sectionArr.push(section_to_includes.toLowerCase());
+            }
+            if (window._data.chapter1) {
+              section_to_includes += "/" + window._data.chapter1;
+              sectionArr.push(section_to_includes.toLowerCase());
+            }
+            break;
+
+          case "bt_sg":
+            if (window._data.level2) {
+              section_to_includes = window._data.level2;
+              sectionArr.push(section_to_includes.toLowerCase());
+            }
+            if (window._data.chapter1) {
+              section_to_includes += "/" + window._data.chapter1;
+              sectionArr.push(section_to_includes.toLowerCase());
+            }
+            break;
+
+          case "tm_sg":
+            if (window._data.dfp) {
+              section_to_includes = window._data.dfp.section;
+              sectionArr.push(section_to_includes.toLowerCase());
+            }
+            break;
+
+          case "eshop":
+            sectionArr = [];
+            break;
+
+          case "bh_sg":
+            if (window._data.section) {
+              section_to_includes = window._data.section;
+              sectionArr.push(section_to_includes.toLowerCase());
+            }
+            if (window._data.chapter1) {
+              section_to_includes += "/" + window._data.chapter1;
+              sectionArr.push(section_to_includes.toLowerCase());
+            }
+            break;
+        }
+
+        return sectionArr;
+      };
+
+      var get_site_id = function (hostname) {
+        let domains = [
+          "straitstimes.com",
+          "businesstimes.com.sg",
+          "zaobao.com.sg",
+          "zaobao.com",
+          "tamilmurasu.com.sg",
+          "beritaharian.sg",
+          "subscribe.sph.com.sg",
+          "eshop4-cms.sph.com.sg",
+          "eshop.crsm.dev.ems.sphdigital.com.sg",
+          "stomp.sg",
+        ];
+
+        let site_id = "st_sg";
+
+        if (hostname.includes(domains[1])) {
+          site_id = "bt_sg";
+        } else if (hostname.includes(domains[2])) {
+          site_id = "zb_sg";
+        } else if (hostname.includes(domains[3])) {
+          site_id = "zb_cn";
+        } else if (hostname.includes(domains[4])) {
+          site_id = "tm_sg";
+        } else if (hostname.includes(domains[5])) {
+          site_id = "bh_sg";
+        } else if (
+          hostname.includes(domains[6]) ||
+          hostname.includes(domains[7]) ||
+          hostname.includes(domains[8])
+        ) {
+          site_id = "eshop";
+        } else if (hostname.includes(domains[9])) {
+          site_id = "stomp";
+        }
+        return site_id;
+      };
+
+      /**
+       * @param {String} name The name of the cookie
+       * @param {String} value The value of the cookie
+       * @param {Number} seconds The expiry in seconds of the cookie
+       */
+      var createCookie = function (name, value, seconds) {
+        var date, expires;
+        if (seconds) {
+          date = new Date();
+          date.setSeconds(date.getSeconds() + seconds);
+          expires = "; expires=" + date.toUTCString();
+        } else {
+          expires = "";
+        }
+        document.cookie = name + "=" + value + expires + "; path=/";
+      };
+
+      // Generate fallback suid cookie
+      var generateFallbackSuid = function (id) {
+        const prefix = "EASDEF";
+        const fallbackSuid = prefix + id;
+        createCookie("fallbacksuid", fallbackSuid, 400 * 24 * 60 * 60);
+      };
+
+      // Try to get the fallbacksuid cookie value if it exists, else generate the fallbacksuid cookie
+      var randomId = this.generateRandomId(32);
+      var get_fallback_cookie_value = function () {
+        if (get_cookie_value("fallbacksuid")) {
+          return get_cookie_value("fallbacksuid");
+        } else {
+          generateFallbackSuid(randomId);
+          return get_cookie_value("fallbacksuid");
+        }
+      };
+
+      // Get Device Tyoe
+      var getDevice = function getDeviceType() {
+        const ua = navigator.userAgent;
+
+        if (ua.includes("com.buuuk.st")) {
+          return "SPH Android WebView";
+        }
+        if (ua.includes("com.sph.stiphone")) {
+          return "SPH iOS WebView";
+        }
+        if (/(WebView|wv|Version\/[4-9]\.)/i.test(ua)) {
+          return "Third Party App Android WebView";
+        }
+        if (/iPhone|iPad|iPod/i.test(ua) && !/Safari/i.test(ua)) {
+          return "Third Party App iOS WebView";
+        }
+        if (/(tablet|ipad|playbook|silk)|(android(?!.*mobi))/i.test(ua)) {
+          return "tablet";
+        }
+        if (
+          /Mobile|Android|iP(hone|od)|IEMobile|BlackBerry|Kindle|Silk-Accelerated|(hpw|web)OS|Opera M(obi|ini)/.test(
+            ua
+          )
+        ) {
+          return "mobile";
+        }
+        return "desktop";
+      };
+
+      var getGeography = function getUserGeography() {
+        var geography =
+          // Publications
+          get_cookie_value("sph_user_country") ||
+          // Eshop
+          get_cookie_value("user_country") ||
+          "SG";
+
+        if (geography == "SG") {
+          geography = "Singapore";
+        } else if (geography == "MY") {
+          geography = "Malaysia";
+        } else if (geography == "ID") {
+          geography = "Indonesia";
+        } else if (geography == "PH") {
+          geography = "Philippines";
+        } else if (geography == "CN") {
+          geography = "China";
+        } else if (geography == "AU") {
+          geography = "Australia";
+        } else if (geography == "US") {
+          geography = "USA";
+        } else if (geography == "HK") {
+          geography = "Hong Kong";
+        } else if (geography == "TW") {
+          geography = "Taiwan";
+        }
+
+        return geography;
+      };
+
+      var getArticleId = function () {
+        let articleId = "";
+        // Article ID is null when site_id is eshop
+        let site_id = get_site_id(window.location.hostname);
+        if (site_id === "eshop") {
+          articleId = null;
+          return articleId;
+        }
+
+        // Article ID from _data object on article page
+        if (typeof window._data !== "undefined" && window._data.articleid > 1) {
+          articleId = window._data.articleid;
+        }
+
+        return articleId;
+      };
+
+      var getMySPHId = function () {
+        let mySPHId = "00000000000000000000000000000000";
+        // mySPH ID from _data object on article page
+        if (
+          typeof window._data !== "undefined" &&
+          window._data.hasOwnProperty("at") &&
+          window._data.at.length > 0
+        ) {
+          mySPHId = decodeURIComponent(_data.at);
+        } else if (window?.dataLayer[0]?.at?.length > 0) {
+          mySPHId = decodeURIComponent(window.dataLayer[0].at);
+        }
+
+        return mySPHId;
+      };
+
+      var getKeywords = function () {
+        let keywords = [];
+        let site_id = get_site_id(window.location.hostname);
+
+        if (site_id === "eshop") {
+          keywords = [];
+          return keywords;
+        }
+
+        if (
+          typeof window._data !== "undefined" &&
+          window._data.hasOwnProperty("keyword") &&
+          window._data.keyword.length > 0
+        ) {
+          keywords = window._data.keyword.toUpperCase().split(",");
+        }
+
+        if (keywords.length === 0) {
+          keywords = ["."];
+        }
+
+        return keywords;
+      };
+
+      //SiteId
+      let site_id =
+        paramsObj.default_site_id ?? get_site_id(window.location.hostname);
+
+      var getVisitorCatFromJwt = function () {
+        const serviceFlags = {
+          bt_sg: [
+            "bt_all",
+            "bt_sphone",
+            "bt_tablet",
+            "bt_trial_all",
+            "bt_trial_sphone",
+            "bt_trial_tablet",
+            "bts",
+            "bts_trial",
+            "kbt_tablet",
+          ],
+          bh_sg: [
+            "bh tablet",
+            "bh_all",
+            "bh_online",
+            "bh_online_trial",
+            "bh_sphone",
+            "bh_tablet",
+            "bh_trial_all",
+            "bh_trial_sphone",
+            "bh_trial_tablet",
+            "kbh_tablet",
+          ],
+          tm_sg: [
+            "cir_tm_online",
+            "cir_tm_online_trial",
+            "ktm_tablet",
+            "tm_online",
+            "tm_all",
+            "tm_sphone",
+            "tm_tablet",
+            "tm_trial_all",
+            "tm_trial_sphone",
+            "tm_trial_tablet",
+          ],
+        };
+
+        const jwt = JSON.parse(localStorage.getItem("okta-token-storage"))
+          ?.accessToken?.accessToken;
+        if (!jwt && typeof jwt !== "string") return 1;
+
+        // get service_flags from jwt token from okta
+        const serviceFlagsFromJwt = jwtUtils.jwtDecode(jwt)?.service_flags;
+
+        if (serviceFlagsFromJwt.includes("bh_geng") && site_id === "bh_sg")
+          return 15;
+
+        // check if there are subscriber flags in jwt service_flags array
+        const intersectingFlags = serviceFlagsFromJwt.filter(
+          (flag) => serviceFlags[site_id].indexOf(flag) !== -1
+        );
+
+        // if jwt has subscriber flags, user is subscriber
+        if (intersectingFlags.length > 0) return 2;
+
+        // if jwt no subscriber flags, user is registered
+        return 3;
+      };
+
+      //Visitorcat
+      var getVisitorCat = function () {
+        // check if its eshop site
+        if (site_id === "eshop") {
+          let userStatus = get_cookie_value("user_status") || null;
+          if (userStatus === null) return 1;
+          if (userStatus?.toLowerCase().includes("subscriber")) return 2;
+          if (userStatus?.toLowerCase().includes("registered")) return 3;
+          if (userStatus?.toLowerCase().includes("freetrial")) return 6;
+          return 1;
+        }
+
+        // If it's a regwall enabled publication, infer the visitor category from the service flags stored within the auth session JWT token
+        // Else retrieve the visitor category from _data.visitorcat
+        if (!regwallAllowedDomains.includes(site_id))
+          return parseInt(window._data.visitorcat) || 1;
+
+        // check okta-token-storage token present to see if user is logged in
+        if (isEmpty(JSON.parse(localStorage.getItem("okta-token-storage"))))
+          return 1;
+
+        return getVisitorCatFromJwt()
+      };
+
+      var getAccessFlag = function () {
+        let site_id = get_site_id(window.location.hostname);
+
+        if (site_id === "eshop") {
+          return 1;
+        }
+
+        switch (window._data.contentcat) {
+          case "free":
+            return 1;
+          case "premium":
+            return 2;
+          default:
+        }
+
+        return parseInt(window._data.contentcat) || 1;
+      };
+
+      var getFreeArticleViewCount = function () {
+        return get_cookie_value("freeArticleViewCount") || 0;
+      };
+
+      let suidPollRetryCount = 0;
+      const pollForSUIDCookie = () => {
+        suid = get_cookie_value("suid") || false;
+
+        if (!suid) {
+          suidPollRetryCount++;
+          if (suidPollRetryCount >= 10) {
+            suid = get_fallback_cookie_value();
+            return;
+          }
+
+          setTimeout(pollForSUIDCookie, 250);
+          return;
+        }
+
+        if (runQueued) this.run();
+      };
+      pollForSUIDCookie();
+
+      cdp_params = {
+        ...cdp_params,
+        mysph_id: getMySPHId(),
+        propensity_score:
+          window.propenmo1 !== "undefined" ? window.propenmo1 : "-1",
+        site_id: site_id,
+        section: get_section_data(),
+        access_flag: getAccessFlag(),
+        keyword: getKeywords(),
+        visitor_category: getVisitorCat(),
+        url: window.location.href.split("?")[0],
+        device: getDevice(),
+        geography: getGeography(),
+        article_id: getArticleId(),
+        plugin_config: {
+          gaClickEventTracking: true,
+          gaPageViewTracking: true,
+        },
+        free_article_pageview: getFreeArticleViewCount(),
+      };
+    };
+
+    this.init = function (
+      module_id,
+      server_url,
+      api_key,
+      default_site_id = null
+    ) {
+      paramsObj = {
+        module_id,
+        server_url,
+        api_key,
+        default_site_id,
+      };
+
+      this.prepareData();
+
+      return this;
+    };
+
+    // Call Activation Service to query for campaigns
+    this.run = function () {
+      if (!suid) {
+        // run() called before suid is ready
+        runQueued = true;
+        return this;
+      }
+
+      console.log("run");
+      if (!isEmpty(paramsObj)) {
+        var params = Object.assign({}, { ...cdp_params, suid }, {
+          module_id: paramsObj.module_id,
+          cd_url: `${paramsObj.server_url}/api/activation`,
+          api_key: paramsObj.api_key,
+        });
+
+        jQuery("#sph_cdp_" + paramsObj.module_id)
+          .cdp(params)
+          .cdp("run");
+      } else {
+        jQuery.error("SPHWave Initialization Error");
+      }
+    };
+
+    return this;
+  } catch (e) {
+    jQuery.error("Error occurred when calling SPHWave");
+  }
+};
+
+var SPH_CDP = function () {
+  // wrapper around the `new` syntax
+  return new SPHWave_Wrap();
+};
+
+var SPHWave = function () {
+  // wrapper around the `new` syntax
+  return new SPHWave_Wrap();
+};
+
+// GA 4 GTM
+(function (w, d, s, l, i) {
+  w[l] = w[l] || [];
+  w[l].push({ "gtm.start": new Date().getTime(), event: "gtm.js" });
+  var f = d.getElementsByTagName(s)[0],
+    j = d.createElement(s),
+    dl = l != "dataLayer" ? "&l=" + l : "";
+  j.async = true;
+  j.src = "https://www.googletagmanager.com/gtm.js?id=" + i + dl;
+  f.parentNode.insertBefore(j, f);
+})(window, document, "script", "dataLayer", "GTM-MSJW4DM");
+
+/**
+ * Original file: /npm/jwt-decode@4.0.0/build/cjs/index.js
+ */
+("use strict");
+const jwtUtils = (function () {
+  class InvalidTokenError extends Error { }
+
+  function b64DecodeUnicode(e) {
+    return decodeURIComponent(
+      atob(e).replace(/(.)/g, (e, r) => {
+        let o = r.charCodeAt(0).toString(16).toUpperCase();
+        return o.length < 2 && (o = "0" + o), "%" + o;
+      })
+    );
+  }
+
+  function base64UrlDecode(e) {
+    let r = e.replace(/-/g, "+").replace(/_/g, "/");
+    switch (r.length % 4) {
+      case 0:
+        break;
+      case 2:
+        r += "==";
+        break;
+      case 3:
+        r += "=";
+        break;
+      default:
+        throw new Error("base64 string is not of the correct length");
+    }
+    try {
+      return b64DecodeUnicode(r);
+    } catch (e) {
+      return atob(r);
+    }
+  }
+
+  function jwtDecode(e, r) {
+    if (typeof e !== "string")
+      throw new InvalidTokenError("Invalid token specified: must be a string");
+    r ||= {};
+    const o = r.header === true ? 0 : 1;
+    const t = e.split(".")[o];
+    if (typeof t !== "string")
+      throw new InvalidTokenError(
+        `Invalid token specified: missing part #${o + 1}`
+      );
+    let n;
+    try {
+      n = base64UrlDecode(t);
+    } catch (e) {
+      throw new InvalidTokenError(
+        `Invalid token specified: invalid base64 for part #${o + 1} (${e.message
+        })`
+      );
+    }
+    try {
+      return JSON.parse(n);
+    } catch (e) {
+      throw new InvalidTokenError(
+        `Invalid token specified: invalid json for part #${o + 1} (${e.message
+        })`
+      );
+    }
+  }
+
+  return { jwtDecode, InvalidTokenError };
+})();
